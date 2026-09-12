@@ -1,0 +1,6 @@
+{
+  "name": "Shopaxe",
+  "description": "A modern, minimalist e-commerce store featuring dynamic category filtering, cart management, quick view, and responsive design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
