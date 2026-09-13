@@ -24,15 +24,19 @@ import {
   ArrowRight,
   ArrowLeft,
   ChevronDown,
+  FolderPlus,
+  Folder,
 } from 'lucide-react';
-import { Product, ProductColor } from '../../types';
+import { Product, ProductColor, Category } from '../../types';
 import { ImageUploadInput } from './ImageUploadInput';
+import { getAllCategories, saveCustomCategory, CATEGORY_IMAGE_PRESETS } from '../../utils/categoryStorage';
 
 interface ProductListingFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (product: Product) => void;
   initialProduct?: Product | null;
+  onCategoryCreated?: (newCategory: Category) => void;
 }
 
 // Preset Luxury Templates for 1-Click Fast Populating
@@ -204,6 +208,7 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
   onClose,
   onSave,
   initialProduct,
+  onCategoryCreated,
 }) => {
   const isEditing = Boolean(initialProduct);
 
@@ -212,7 +217,7 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
 
   // Form State
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<Product['category']>('Apparel');
+  const [category, setCategory] = useState<string>('Apparel');
   const [sku, setSku] = useState('');
   const [price, setPrice] = useState<number>(120);
   const [originalPrice, setOriginalPrice] = useState<number | undefined>(150);
@@ -230,6 +235,16 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
     'Machine wash cold gentle cycle',
   ]);
   const [newDetailInput, setNewDetailInput] = useState('');
+
+  // Category State & Creation Options
+  const [categoriesList, setCategoriesList] = useState<Category[]>(() => getAllCategories());
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatSlug, setNewCatSlug] = useState('');
+  const [newCatImage, setNewCatImage] = useState<string>(CATEGORY_IMAGE_PRESETS[0].url);
+  const [newCatDescription, setNewCatDescription] = useState('');
+  const [categoryCreateSuccess, setCategoryCreateSuccess] = useState<string | null>(null);
+  const [categoryCreateError, setCategoryCreateError] = useState<string | null>(null);
 
   // Colors & Sizes
   const [colors, setColors] = useState<ProductColor[]>([
@@ -276,10 +291,69 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
     }
   }, [initialProduct, isOpen]);
 
+  // Refresh categories when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCategoriesList(getAllCategories());
+      setCategoryCreateError(null);
+      setCategoryCreateSuccess(null);
+    }
+  }, [isOpen]);
+
   const generateSku = (cat: string = category) => {
-    const prefix = cat.slice(0, 3).toUpperCase();
+    const cleanCat = (cat || 'ITM').replace(/[^a-zA-Z0-9]/g, '');
+    const prefix = (cleanCat.slice(0, 3) || 'ITM').toUpperCase();
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     return `AXE-${prefix}-${randomNum}`;
+  };
+
+  const handleCreateCategorySubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newCatName.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setCategoryCreateError('Category name must be at least 2 characters.');
+      return;
+    }
+
+    // Check if category already exists
+    const existing = categoriesList.find(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase() || c.id.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    let targetCat: Category;
+
+    if (existing) {
+      targetCat = existing;
+      setCategory(existing.name);
+      if (!isEditing) setSku(generateSku(existing.name));
+      setCategoryCreateSuccess(`Category "${existing.name}" already exists and was selected.`);
+    } else {
+      const generatedSlug = newCatSlug.trim() || trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      targetCat = {
+        id: trimmed,
+        name: trimmed,
+        slug: generatedSlug,
+        itemCount: 0,
+        image: newCatImage || CATEGORY_IMAGE_PRESETS[0].url,
+        description: newCatDescription.trim() || `${trimmed} Department Collection`,
+      };
+
+      const updated = saveCustomCategory(targetCat);
+      setCategoriesList(updated);
+      setCategory(targetCat.name);
+      if (!isEditing) setSku(generateSku(targetCat.name));
+      if (onCategoryCreated) onCategoryCreated(targetCat);
+      setCategoryCreateSuccess(`Category "${targetCat.name}" created and applied to product!`);
+    }
+
+    setCategoryCreateError(null);
+    setTimeout(() => {
+      setIsCreateCategoryOpen(false);
+      setNewCatName('');
+      setNewCatSlug('');
+      setNewCatDescription('');
+      setCategoryCreateSuccess(null);
+    }, 1200);
   };
 
   const resetForm = () => {
@@ -628,24 +702,53 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-neutral-300 font-bold text-xs mb-1.5">
-                          Department Category <span className="text-rose-400">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-neutral-300 font-bold text-xs">
+                            Department Category <span className="text-rose-400">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCreateCategoryOpen((prev) => !prev);
+                              setCategoryCreateError(null);
+                            }}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all cursor-pointer"
+                            title="Create a new department category for your product"
+                          >
+                            <FolderPlus className="w-3 h-3" />
+                            <span>{isCreateCategoryOpen ? 'Close Category Form' : '+ Create Category'}</span>
+                          </button>
+                        </div>
                         <select
                           value={category}
                           onChange={(e) => {
-                            const newCat = e.target.value as Product['category'];
+                            if (e.target.value === '__CREATE_NEW_CATEGORY__') {
+                              setIsCreateCategoryOpen(true);
+                              return;
+                            }
+                            const newCat = e.target.value;
                             setCategory(newCat);
                             if (!isEditing) setSku(generateSku(newCat));
                           }}
-                          className="w-full px-3.5 py-2.5 bg-neutral-950 border border-neutral-800 rounded-2xl text-white text-xs focus:outline-none focus:border-amber-400"
+                          className="w-full px-3.5 py-2.5 bg-neutral-950 border border-neutral-800 rounded-2xl text-white text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
                         >
-                          <option value="Apparel">Apparel (Knitwear, Tops, Outerwear)</option>
-                          <option value="Footwear">Footwear (Boots, Sneakers, Loafers)</option>
-                          <option value="Accessories">Accessories (Watches, Eyewear, Leather)</option>
-                          <option value="Home & Living">Home & Living (Ceramics, Lighting, Decor)</option>
-                          <option value="Audio & Tech">Audio & Tech (Acoustics, Gadgets)</option>
+                          {categoriesList.filter((c) => c.id !== 'all').map((cat) => (
+                            <option key={cat.id} value={cat.name}>
+                              {cat.name} {cat.itemCount > 0 ? `(${cat.itemCount} items)` : ''}
+                            </option>
+                          ))}
+                          <option value="__CREATE_NEW_CATEGORY__" className="text-amber-400 font-bold bg-neutral-900">
+                            + Create New Category...
+                          </option>
                         </select>
+                        <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-400">
+                          <span className="truncate">Selected: <strong className="text-white font-medium">{category}</strong></span>
+                          {!['Apparel', 'Footwear', 'Accessories', 'Home & Living', 'Audio & Tech'].includes(category) && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-medium">
+                              Custom Category
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -686,6 +789,202 @@ export const ProductListingFormModal: React.FC<ProductListingFormModalProps> = (
                         </div>
                       </div>
                     </div>
+
+                    {/* INLINE CREATE CATEGORY DRAWER / CARD */}
+                    <AnimatePresence>
+                      {isCreateCategoryOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                          exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                          transition={{ duration: 0.25 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-4 sm:p-5 bg-neutral-900/95 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 via-neutral-900 to-neutral-950 shadow-xl space-y-4 relative">
+                            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                                  <FolderPlus className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <span>Create New Product Category</span>
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/20 text-amber-300 font-mono">Storefront Ready</span>
+                                  </h4>
+                                  <p className="text-[11px] text-neutral-400">
+                                    Define a new department category. It will automatically be selected for this product and added to catalog filters.
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsCreateCategoryOpen(false)}
+                                className="text-neutral-400 hover:text-white p-1 rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Form Fields */}
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[11px] font-bold text-neutral-300 mb-1">
+                                    Category Name <span className="text-rose-400">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Fine Jewelry, Fragrances, Eyewear, Watches..."
+                                    value={newCatName}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setNewCatName(val);
+                                      setNewCatSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleCreateCategorySubmit();
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400"
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[11px] font-bold text-neutral-300 mb-1">
+                                    URL Slug &amp; SKU Preview
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="e.g. fine-jewelry"
+                                      value={newCatSlug}
+                                      onChange={(e) => setNewCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, ''))}
+                                      className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-neutral-300 text-xs font-mono focus:outline-none focus:border-amber-400"
+                                    />
+                                    {newCatName.trim() && (
+                                      <span className="px-2.5 py-1.5 rounded-xl bg-neutral-950 border border-neutral-800 text-[10px] font-mono text-amber-400 whitespace-nowrap">
+                                        SKU: AXE-{(newCatName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3) || 'ITM').toUpperCase()}-XXXX
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Category Imagery Presets & Custom URL */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-neutral-300 mb-1.5">
+                                  Department Cover Image (Select luxury preset or enter URL)
+                                </label>
+                                
+                                {/* Presets Horizontal Scroll */}
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-2">
+                                  {CATEGORY_IMAGE_PRESETS.slice(0, 5).map((preset) => (
+                                    <button
+                                      key={preset.label}
+                                      type="button"
+                                      onClick={() => setNewCatImage(preset.url)}
+                                      className={`relative rounded-xl overflow-hidden border p-1 text-left group transition-all cursor-pointer ${
+                                        newCatImage === preset.url
+                                          ? 'border-amber-400 ring-2 ring-amber-400/40 bg-neutral-800/80'
+                                          : 'border-neutral-800 hover:border-neutral-700 bg-neutral-950/60'
+                                      }`}
+                                    >
+                                      <div className="w-full h-12 rounded-lg overflow-hidden relative">
+                                        <img
+                                          src={preset.url}
+                                          alt={preset.label}
+                                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        {newCatImage === preset.url && (
+                                          <div className="absolute inset-0 bg-amber-500/40 backdrop-blur-[1px] flex items-center justify-center">
+                                            <Check className="w-3.5 h-3.5 text-white drop-shadow font-bold" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <p className="text-[9px] font-medium text-neutral-300 truncate mt-1">
+                                        {preset.label}
+                                      </p>
+                                    </button>
+                                  ))}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="url"
+                                    placeholder="Or paste custom image URL (https://...)"
+                                    value={newCatImage}
+                                    onChange={(e) => setNewCatImage(e.target.value)}
+                                    className="flex-1 px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400"
+                                  />
+                                  {newCatImage && (
+                                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-neutral-700 shrink-0">
+                                      <img
+                                        src={newCatImage}
+                                        alt="Preview"
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Description (Optional) */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-neutral-300 mb-1">
+                                  Department Bio / Description <span className="text-neutral-500">(Optional)</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Artisanal jewelry crafted from recycled 18k gold and sustainably sourced gemstones"
+                                  value={newCatDescription}
+                                  onChange={(e) => setNewCatDescription(e.target.value)}
+                                  className="w-full px-3 py-2 bg-neutral-950 border border-neutral-800 rounded-xl text-white text-xs focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Error & Success States */}
+                            {categoryCreateError && (
+                              <p className="text-xs text-rose-400 flex items-center gap-1.5 font-medium bg-rose-500/10 p-2 rounded-xl border border-rose-500/20">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                <span>{categoryCreateError}</span>
+                              </p>
+                            )}
+
+                            {categoryCreateSuccess && (
+                              <p className="text-xs text-emerald-400 flex items-center gap-1.5 font-bold bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
+                                <Check className="w-3.5 h-3.5 shrink-0" />
+                                <span>{categoryCreateSuccess}</span>
+                              </p>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-800">
+                              <button
+                                type="button"
+                                onClick={() => setIsCreateCategoryOpen(false)}
+                                className="px-3.5 py-1.5 rounded-xl border border-neutral-800 text-neutral-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCreateCategorySubmit()}
+                                className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Save &amp; Apply Category</span>
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
                     <div>
                       <label className="block text-neutral-300 font-bold text-xs mb-1.5">

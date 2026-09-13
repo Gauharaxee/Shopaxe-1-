@@ -147,6 +147,7 @@ import {
 } from '../lib/productsApi';
 import { ImageUploadInput } from './seller/ImageUploadInput';
 import { ProductListingFormModal } from './seller/ProductListingFormModal';
+import { getAllCategories } from '../utils/categoryStorage';
 import { AddOrderModal } from './seller/AddOrderModal';
 import { DeleteOrderModal } from './seller/DeleteOrderModal';
 import { AddCustomerModal } from './seller/AddCustomerModal';
@@ -183,7 +184,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Security State
   const [isLocked, setIsLocked] = useState<boolean>(true);
-  const [masterPin, setMasterPin] = useState<string>('428427');
+  const [masterPin, setMasterPin] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem('aura_master_pin');
+      if (stored && stored !== '428427' && stored !== '0000') return stored;
+    } catch (e) {}
+    return '2933';
+  });
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'customers' | 'security' | 'settings'>('overview');
@@ -810,7 +817,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleChangeMasterPinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPinInput.trim().length >= 4) {
-      setMasterPin(newPinInput.trim());
+      const updated = newPinInput.trim();
+      setMasterPin(updated);
+      try {
+        localStorage.setItem('aura_master_pin', updated);
+      } catch (e) {}
       setNewPinInput('');
       setPinChangeSuccess(true);
       addSecurityLog('Master Security Access PIN Updated', 'Security', 'critical');
@@ -1620,11 +1631,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     className="px-3 py-2 text-xs bg-neutral-900 border border-neutral-800 rounded-xl text-white focus:outline-none focus:border-amber-400"
                   >
                     <option value="all">All Categories</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Footwear">Footwear</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Home & Living">Home & Living</option>
-                    <option value="Audio & Tech">Audio & Tech</option>
+                    {getAllCategories(products).filter((c) => c.id !== 'all').map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
                   </select>
 
                   <div className="flex gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800 text-xs">
@@ -2950,6 +2959,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isOpen={isAddProductOpen}
         onClose={() => setIsAddProductOpen(false)}
         onSave={handleSaveNewProduct}
+        onCategoryCreated={(newCat) => {
+          addSecurityLog(`Created New Department Category: ${newCat.name}`, 'Inventory', 'info');
+        }}
       />
 
       {/* DETAILED PRODUCT EDITING MODAL */}
@@ -2958,6 +2970,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         initialProduct={editingProduct}
         onClose={() => setEditingProduct(null)}
         onSave={handleSaveEditedProduct}
+        onCategoryCreated={(newCat) => {
+          addSecurityLog(`Created New Department Category: ${newCat.name}`, 'Inventory', 'info');
+        }}
       />
 
       {/* DELETE PRODUCT CONFIRMATION MODAL WITH SAVE & ARCHIVE OPTIONS */}

@@ -6,7 +6,7 @@ export interface ProductColor {
 export interface Product {
   id: string;
   name: string;
-  category: 'Apparel' | 'Footwear' | 'Accessories' | 'Home & Living' | 'Audio & Tech';
+  category: string;
   price: number;
   originalPrice?: number;
   rating: number;
@@ -43,6 +43,7 @@ export interface Category {
   slug: string;
   itemCount: number;
   image: string;
+  description?: string;
 }
 
 export type SortOption = 'featured' | 'price-asc' | 'price-desc' | 'rating' | 'newest';

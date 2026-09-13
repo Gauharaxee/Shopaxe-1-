@@ -13,6 +13,7 @@ import {
 import { Product, ProductColor, Category, SortOption, FilterOptions, ToastNotification } from '../types';
 import { ProductCard } from './ProductCard';
 import { CATEGORIES } from '../data/products';
+import { getAllCategories } from '../utils/categoryStorage';
 import { ProductGridSkeleton } from './Skeleton';
 
 interface ProductGridProps {
@@ -104,7 +105,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       
       {/* Category Pills Header */}
       <div className="flex items-center gap-2 overflow-x-auto pb-4 no-scrollbar scroll-smooth">
-        {CATEGORIES.map((cat) => {
+        {getAllCategories(products).map((cat) => {
           const isActive = selectedCategory === cat.id;
           return (
             <button

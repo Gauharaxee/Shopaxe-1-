@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShoppingBag, 
@@ -16,6 +16,7 @@ import {
   Truck
 } from 'lucide-react';
 import { CATEGORIES } from '../data/products';
+import { getAllCategories } from '../utils/categoryStorage';
 import { BrandLogo } from './BrandLogo';
 import { StoreSettings } from '../types';
 
@@ -53,6 +54,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [navCategories, setNavCategories] = useState(() => getAllCategories());
+
+  useEffect(() => {
+    const handleUpdated = () => {
+      setNavCategories(getAllCategories());
+    };
+    window.addEventListener('aura_categories_updated', handleUpdated);
+    return () => window.removeEventListener('aura_categories_updated', handleUpdated);
+  }, []);
 
   const handleNavClick = (catId: string) => {
     onCategorySelect(catId);
@@ -152,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
             
-            {CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
+            {navCategories.filter(c => c.id !== 'all').map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => handleNavClick(cat.id)}
@@ -360,7 +370,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <ChevronRight className="w-4 h-4 text-neutral-400" />
                 </button>
 
-                {CATEGORIES.filter(c => c.id !== 'all').map((cat) => (
+                {navCategories.filter(c => c.id !== 'all').map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => handleNavClick(cat.id)}
